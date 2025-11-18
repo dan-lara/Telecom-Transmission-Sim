@@ -20,6 +20,7 @@ Implementation of a TX/RX system including:
 * Analysis of BER vs. SNR curves.
 * Comparison of different modulation schemes.
 
+
 ### Task III: Power Amplifier (PA) & WebLab
 * Hardware-in-the-loop testing via [WebLab](https://dpdcompetition.com/rfweblab/measurement-setup/).
 * Measurement of EVM, ACPR, and Power Efficiency.
