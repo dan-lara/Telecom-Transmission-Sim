@@ -1,4 +1,4 @@
-% This code is for 
+% This code is for simulating the telecommunition process in a script
 %%   
 clc;
 clear;
@@ -6,30 +6,28 @@ close all;
 
 %% Configuration
 % Modulation type
-MODULATION_TYPE = 'QPSK';    % This script provide 'BPSK', 'QPSK' and '16QAM'
+MODULATION_TYPE = '16QAM';    % This script provide 'BPSK', 'QPSK' and '16QAM'
 
 % Automatically set k and M according to the modulation type
 % M = 2^k => k = log2(M)
 switch MODULATION_TYPE
     case 'BPSK'
-        M = 2;
-        k = 1;
+        M = 2; k = 1; phase_offset = 0;
     case 'QPSK'
-        M = 4;
-        k = 2;
+        M = 4; k = 2; phase_offset = pi/4;
     case '16QAM'
-        M = 16;
-        k = 4;
+        M = 16;k = 4; phase_offset = 0;
     otherwise
         error('Unknown modulation type');
 end
 
 % Basic parameters
-N = 1e5;        % Numbre of bits
+N = 1e6;        % Numbre of bits
+N = floor(N / k) * k;   % Ensure the number of bits is an integer multiple of k
 fc = 5e3;       % carrier frequency
 Rb = 1e3;       % Symbol rate
 Rs = Rb*k;      % Bit rate
-sps = 32;        % Samples Per Symbol
+sps = 32;       % Samples Per Symbol
 fs = Rb*sps;    % Sample frequency = symbol rate * the numbre of sample point for each symbol
 n_total = N*sps;        % Sample point total
 n_each = N/2*sps;       % Sample point for each bit
@@ -44,15 +42,14 @@ tx_bits = randi([0 1], N, 1);
 
 % Map binary bits to constellation points on the complex plane
 if (M == 2 || M ==4)
-    tx_symbols = pskmod(tx_bits, M, pi/4, 'InputType','bit');
+    tx_symbols = pskmod(tx_bits, M, phase_offset, 'InputType','bit');
 elseif (M == 16)
-    tx_symbols = qammod(tx_bits, M, 'InputType','bit');
-    %tx_symbols = qammod(tx_bits, M, 'InputType', 'bit', 'UnitAveragePower', true);
+    tx_symbols = qammod(tx_bits, M, 'InputType', 'bit', 'UnitAveragePower', true);
 end
 
 % filter
 rolloff = 0.35; % rolloff factor for the Root Raised Cosine filter
-span = 6;       % Filter length
+span = 10;       % Filter length
 h_rrc = rcosdesign(rolloff, span, sps, "sqrt");
 tx_filtered = upfirdn(tx_symbols, h_rrc, sps);
 
@@ -69,37 +66,113 @@ tx_rf = I_signal .* cos(2*pi*fc*t') - Q_signal .* sin(2*pi*fc*t');
 
 %% Channel
 rx_rf = tx_rf;
+% rx_rf = awgn(tx_rf, snr, 'measured');
 
 %% Mixer - Down convension
 % Down convention
-rx_baseband = rx_rf .* (cos(2*pi*fc*t') - 1j*sin(2*pi*fc*t'));
+rx_baseband = rx_rf .* (cos(2*pi*fc*t') - 1j*sin(2*pi*fc*t'))* 2;
 
 % Matched Filter
 rx_filtered = upfirdn(rx_baseband, h_rrc, 1, 1);
 
 % Downsampling and Delay Compensation
-delay = span * sps; 
-rx_symbols = rx_filtered(delay + 1 : sps : end);
+total_delay = span * sps; % Total delay (TX filter + RX filter)
+rx_symbols = rx_filtered(total_delay + 1 : sps : end);
+
+% ---截断多余的尾部数据 ---
+% 计算原本发送了多少个符号
+num_tx_symbols = length(tx_bits) / k; 
+% 强制截断接收信号，使其长度与发送一致
+rx_symbols = rx_symbols(1:num_tx_symbols);
+
+% upfirdn
+num_tx_symbols = length(tx_symbols);
+rx_symbols = rx_symbols(1:num_tx_symbols);
+
 
 %% Receiver - Rx
 % Demodulation
 if (M == 2 || M ==4)
-    rx_bits = pskdemod(rx_symbols, M, pi/4, 'OutputType', 'bit');
+    rx_bits = pskdemod(rx_symbols, M, phase_offset, 'OutputType', 'bit');
 elseif (M == 16)
-    rx_bits = qamdemod(rx_symbols, M, 'OutputType', 'bit');
+    rx_bits = qamdemod(rx_symbols, M, 'OutputType', 'bit', 'UnitAveragePower', true);
 end
 
 % BER Calculation
 [numErrors, BER] = biterr(tx_bits, rx_bits);
 
-%% Resulte
+%% Result
+disp(['Modulation: ', MODULATION_TYPE]);
 disp(['Bit Error Rate: ', num2str(BER)]);
-if BER == 0
-    disp('OK');
-else
-    disp('Bit errors');
-end
-scatterplot(rx_symbols); title('No noise received signal constellation diagram'); %
 
+scatterplot(tx_symbols); 
+title('No noise transmitted signal constellation diagram'); 
+grid on;
 
+% Remove the transients from the head and the attenuation from the tail
+% We only take the stable segment in the middle.
+clean_signal = rx_filtered(total_delay + 1 : end - total_delay);
+
+% 再画眼图
+% 'period', 2*sps 表示每张图显示 2 个符号周期
+eyediagram(clean_signal(1:2000), 2*sps); 
+title('Optimized Eye Diagram (Transients Removed)');
+% eyediagram(rx_filtered(1:2000), 2*sps);
+
+scatterplot(rx_symbols); 
+title('No noise received signal constellation diagram'); 
+grid on;
+
+%% Visualization
+L = length(tx_filtered);    % Signal length
+f = (-L/2 : L/2-1)*(fs/L);  % Frequency axis (Hz)
+
+% Frequency Domain (Spectrum)
+% 1. 计算基带信号频谱 (发射前)
+spec_baseband = fftshift(fft(tx_filtered));
+power_baseband = abs(spec_baseband).^2/L;
+
+% 2. 计算射频信号频谱 (混频后)
+spec_rf = fftshift(fft(tx_rf));
+power_rf = abs(spec_rf).^2/L;
+
+figure('Name', 'Spectrum Analysis');
+subplot(2,1,1);
+plot(f, 10*log10(power_baseband));
+grid on;
+title(['Baseband Spectrum (' MODULATION_TYPE ')']);
+xlabel('Frequency (Hz)'); ylabel('Power (dB)');
+xlim([-fc*2, fc*2]); % 限制显示范围以便观察
+
+subplot(2,1,2);
+plot(f, 10*log10(power_rf));
+grid on;
+title(['RF Passband Spectrum (Carrier = ' num2str(fc) 'Hz)']);
+xlabel('Frequency (Hz)'); ylabel('Power (dB)');
+xlim([-fc*2, fc*2]);
+
+% 说明：你应该看到基带信号中心在 0Hz，而射频信号中心被搬移到了 5000Hz (fc)。
+
+% Time Domain
+figure('Name', 'Time Domain Waveform');
+plot_range = 100:300; % 选择一小段进行放大观察
+t_plot = t(plot_range);
+
+subplot(2,1,1);
+plot(t_plot, real(tx_filtered(plot_range)), 'LineWidth', 1.5);
+hold on;
+plot(t_plot, imag(tx_filtered(plot_range)), '--');
+grid on;
+legend('I (In-phase)', 'Q (Quadrature)');
+title('Baseband Signal (Time Domain)');
+xlabel('Time (s)');
+
+subplot(2,1,2);
+plot(t_plot, tx_rf(plot_range));
+grid on;
+title('RF Modulated Signal (After Mixer)');
+xlabel('Time (s)');
+ylabel('Amplitude');
+
+% 说明：你应该看到下面的 RF 信号是一个高频正弦波，其幅度/相位随着上面的 I/Q 信号变化。
 
