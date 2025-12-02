@@ -128,11 +128,11 @@ L = length(tx_filtered);    % Signal length
 f = (-L/2 : L/2-1)*(fs/L);  % Frequency axis (Hz)
 
 % Frequency Domain (Spectrum)
-% 1. 计算基带信号频谱 (发射前)
+% 1. Calculate the baseband signal spectrum (before transmission)v
 spec_baseband = fftshift(fft(tx_filtered));
 power_baseband = abs(spec_baseband).^2/L;
 
-% 2. 计算射频信号频谱 (混频后)
+% 2. Calculate the radio frequency signal spectrum (after mixing)
 spec_rf = fftshift(fft(tx_rf));
 power_rf = abs(spec_rf).^2/L;
 
@@ -140,11 +140,11 @@ figure('Name', 'Spectrum Analysis');
 max_p = max(power_baseband);
 subplot(2,1,1);
 plot(f, 10*log10(power_baseband));
-% plot(f, 10*log10(power_baseband/max_p)); % 归一化到 0dB 峰值
+% plot(f, 10*log10(power_baseband/max_p)); % Normalized to 0dB peak
 grid on;
 title(['Baseband Spectrum (' MODULATION_TYPE ')']);
 xlabel('Frequency (Hz)'); ylabel('Power (dB)');
-xlim([-fc*2, fc*2]); % 限制显示范围以便观察
+xlim([-fc*2, fc*2]); % Limit the display area for observation
 
 subplot(2,1,2);
 plot(f, 10*log10(power_rf));
@@ -152,8 +152,6 @@ grid on;
 title(['RF Passband Spectrum (Carrier = ' num2str(fc) 'Hz)']);
 xlabel('Frequency (Hz)'); ylabel('Power (dB)');
 xlim([-fc*2, fc*2]);
-
-% 说明：你应该看到基带信号中心在 0Hz，而射频信号中心被搬移到了 5000Hz (fc)。
 
 % Time Domain
 figure('Name', 'Time Domain Waveform');
@@ -179,6 +177,3 @@ grid on;
 title('RF Modulated Signal (After Mixer)');
 xlabel('Time (s)');
 ylabel('Amplitude');
-
-% 说明：你应该看到下面的 RF 信号是一个高频正弦波，其幅度/相位随着上面的 I/Q 信号变化。
-
