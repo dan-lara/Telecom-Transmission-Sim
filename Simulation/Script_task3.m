@@ -1,5 +1,3 @@
-[file name]: Script_task3.m
-[file content begin]
 clc; clear; close all;
 
 %% ==========================================
@@ -268,4 +266,3 @@ disp('      PAout_aligned = timealign(PAin, PAout);');
 disp(' ');
 disp('✅ Tâche 3 - Phase 1 terminée !');
 disp('==========================================');
-[file content end]
