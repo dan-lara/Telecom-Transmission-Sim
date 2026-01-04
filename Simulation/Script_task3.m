@@ -14,9 +14,9 @@ target_length = 10000;
 modulation_type = '16QAM';
 
 % Paramètres du filtre RRC (Root Raised Cosine)
-rolloff = 0.25;      % Facteur de retombée (standard LTE)
+rolloff = 0.35;      % Facteur de retombée (standard LTE)
 span = 10;           % Durée du filtre en symboles
-sps = 8;             % Échantillons par symbole (200 MHz / 8 = 25 MHz)
+sps = 16;             % Échantillons par symbole (200 MHz / 8 = 25 MHz)
 
 %% ==========================================
 %% 2. GÉNÉRATION DU SIGNAL NUMÉRIQUE
