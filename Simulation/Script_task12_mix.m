@@ -13,7 +13,7 @@ fc = 5e3;       % Fréquence porteuse
 Rb = 1e3;       % Débit symbole
 sps = 32;       % Facteur de suréchantillonnage
 fs = Rb*sps;    % Fréquence d'échantillonnage
-N = 10000;      % Nombre de bits initial
+N = 30000;      % Nombre de bits initial
 
 % Configuration du filtre (commune à toutes les modulations)
 rolloff = 0.35; span = 10;
@@ -24,7 +24,7 @@ total_delay = span * sps;
 % Paramètres des canaux dégradés
 CHANNEL_IMPAIRMENTS = {'AWGN', 'Impulsive', 'Rayleigh', 'All'};
 USE_IMPAIRMENTS = true;  % Activer/désactiver les canaux dégradés
-SELECTED_IMPAIRMENT = 'AWGN';  % Choisir 'AWGN', 'Impulsive', 'Rayleigh', ou 'All'
+SELECTED_IMPAIRMENT = 'Rayleigh';  % Choisir 'AWGN', 'Impulsive', 'Rayleigh', ou 'All'
 
 % Paramètres du bruit impulsionnel
 IMPULSE_PROBABILITY = 0.01;     % Probabilité d'impulsion
@@ -36,7 +36,7 @@ MAX_DELAY = 5;                  % Délai maximum en échantillons (trajets multi
 DOPPLER_SHIFT = 10;             % Décalage Doppler en Hz (pour fading temporel)
 
 % SNR pour test fixe
-snr_target_fixed = 20; % dB
+snr_target_fixed = 30; % dB
 
 %% ==========================================
 %% 2. Fonctions auxiliaires pour les canaux dégradés
@@ -53,54 +53,54 @@ function noise = impulsive_noise(signal_length, probability, amplitude)
     end
 end
 
-% Fonction pour simuler un canal de Rayleigh (fading multi-trajets)
-function [output, channel_coeffs] = rayleigh_fading_channel(input, num_rays, max_delay, doppler_shift, fs)
-    % Générer les coefficients du canal
-    channel_coeffs = zeros(num_rays, 1);
-    delays = randi([0, max_delay], num_rays, 1);
-    
-    % Trier les retards
-    [delays, sort_idx] = sort(delays);
-    
-    % Générer des gains complexes (distribution de Rayleigh)
-    for i = 1:num_rays
-        % Gain complexe avec amplitude Rayleigh et phase uniforme
-        amplitude = sqrt(0.5) * randn();
-        phase = 2*pi*rand();
-        channel_coeffs(i) = amplitude * exp(1j*phase);
-    end
-    
-    % Normaliser l'énergie des coefficients
-    channel_coeffs = channel_coeffs / sqrt(sum(abs(channel_coeffs).^2));
-    
-    % Appliquer le fading Doppler (simplifié)
-    t = (0:length(input)-1)' / fs;
-    doppler_effect = exp(1j*2*pi*doppler_shift*t);
-    
-    % Convolution avec le canal multi-trajets
-    output = zeros(size(input));
-    for i = 1:num_rays
-        delay = delays(i);
-        coeff = channel_coeffs(i);
-        if delay == 0
-            output = output + coeff * input .* doppler_effect;
-        else
-            output(delay+1:end) = output(delay+1:end) + coeff * input(1:end-delay) .* doppler_effect(1:end-delay);
-        end
-    end
-    
-    % Normaliser la puissance de sortie
-    output = output * sqrt(mean(abs(input).^2) / mean(abs(output).^2));
-end
+% % Fonction pour simuler un canal de Rayleigh (fading multi-trajets)
+% function [output, channel_coeffs] = rayleigh_fading_channel(input, num_rays, max_delay, doppler_shift, fs)
+%     % Générer les coefficients du canal
+%     channel_coeffs = zeros(num_rays, 1);
+%     delays = randi([0, max_delay], num_rays, 1);
+%     
+%     % Trier les retards
+%     [delays, sort_idx] = sort(delays);
+%     
+%     % Générer des gains complexes (distribution de Rayleigh)
+%     for i = 1:num_rays
+%         % Gain complexe avec amplitude Rayleigh et phase uniforme
+%         amplitude = sqrt(0.5) * randn();
+%         phase = 2*pi*rand();
+%         channel_coeffs(i) = amplitude * exp(1j*phase);
+%     end
+%     
+%     % Normaliser l'énergie des coefficients
+%     channel_coeffs = channel_coeffs / sqrt(sum(abs(channel_coeffs).^2));
+%     
+%     % Appliquer le fading Doppler (simplifié)
+%     t = (0:length(input)-1)' / fs;
+%     doppler_effect = exp(1j*2*pi*doppler_shift*t);
+%     
+%     % Convolution avec le canal multi-trajets
+%     output = zeros(size(input));
+%     for i = 1:num_rays
+%         delay = delays(i);
+%         coeff = channel_coeffs(i);
+%         if delay == 0
+%             output = output + coeff * input .* doppler_effect;
+%         else
+%             output(delay+1:end) = output(delay+1:end) + coeff * input(1:end-delay) .* doppler_effect(1:end-delay);
+%         end
+%     end
+%     
+%     % Normaliser la puissance de sortie
+%     output = output * sqrt(mean(abs(input).^2) / mean(abs(output).^2));
+% end
 
 %% ==========================================
 %% 3. Fonction de simulation de chaîne avec canaux dégradés
 %% ==========================================
 
-function [ber, rx_sym, rx_filt] = simulate_chain_with_impairments(tx_symbols, tx_bits, M, phase_offset, ...
+function [ber, rx_sym, rx_filt] = simulate_chain_with_impairments(tx_symbols, tx_bits_with_pilot, M, phase_offset, ...
                                         snr_target, k, sps, fc, fs, h_rrc, total_delay, ...
                                         chain_type, impairment_type, ...
-                                        impulse_prob, impulse_amp, num_rays, max_delay, doppler_shift)
+                                        impulse_prob, impulse_amp, num_rays, max_delay, doppler_shift, SELECTED_IMPAIRMENT)
     % Paramètres supplémentaires pour les canaux dégradés
     
     % Filtrage RRC
@@ -112,7 +112,8 @@ function [ber, rx_sym, rx_filt] = simulate_chain_with_impairments(tx_symbols, tx
     
     % Canal avec différentes dégradations
     snr_val = snr_target + 10*log10(k) - 10*log10(sps);
-    rx_rf = tx_rf;
+
+    %rx_rf = tx_rf;
     
     switch impairment_type
         case 'AWGN'
@@ -127,15 +128,38 @@ function [ber, rx_sym, rx_filt] = simulate_chain_with_impairments(tx_symbols, tx
             
         case 'Rayleigh'
             % Canal de Rayleigh (fading) + AWGN
-            % Appliquer le fading d'abord
-            [rx_rf_faded, ~] = rayleigh_fading_channel(tx_rf, num_rays, max_delay, doppler_shift, fs);
+            rayChan = comm.RayleighChannel(...
+                'SampleRate', fs, ...
+                'PathDelays', linspace(0, max_delay/fs, num_rays), ...  % 均匀分布时延
+                'AveragePathGains', -linspace(0, 10, num_rays), ...     % 指数衰减功率（dB）
+                'MaximumDopplerShift', doppler_shift, ...
+                'DopplerSpectrum', doppler('Jakes'), ...
+                'PathGainsOutputPort', true);
+            
+            [rx_rf_faded, channel_coeffs] = rayChan(tx_rf);
+            
+            % Normaliser la puissance de sortie pour maintenir l'énergie du signal
+            rx_rf_faded = rx_rf_faded * sqrt(mean(abs(tx_rf).^2) / mean(abs(rx_rf_faded).^2));
+            
             % Ajouter AWGN
             rx_rf = awgn(rx_rf_faded, snr_val, 'measured');
             
         case 'All'
             % Combinaison de toutes les dégradations
-            % 1. Appliquer le fading
-            [rx_rf_faded, channel_info] = rayleigh_fading_channel(tx_rf, num_rays, max_delay, doppler_shift, fs);
+            % 1. Appliquer le fading avec comm.RayleighChannel
+            rayChan = comm.RayleighChannel(...
+                'SampleRate', fs, ...
+                'PathDelays', linspace(0, max_delay/fs, num_rays), ...  % 均匀分布时延
+                'AveragePathGains', -linspace(0, 10, num_rays), ...     % 指数衰减功率（dB）
+                'MaximumDopplerShift', doppler_shift, ...
+                'DopplerSpectrum', doppler('Jakes'), ...
+                'PathGainsOutputPort', true);
+            
+            [rx_rf_faded, channel_coeffs] = rayChan(tx_rf);
+            
+            % Normaliser la puissance de sortie
+            rx_rf_faded = rx_rf_faded * sqrt(mean(abs(tx_rf).^2) / mean(abs(rx_rf_faded).^2));
+            
             % 2. Ajouter AWGN
             rx_rf = awgn(rx_rf_faded, snr_val, 'measured');
             % 3. Ajouter le bruit impulsionnel
@@ -149,29 +173,146 @@ function [ber, rx_sym, rx_filt] = simulate_chain_with_impairments(tx_symbols, tx
     
     % Réception
     rx_base = rx_rf .* (cos(2*pi*fc*t) - 1j*sin(2*pi*fc*t)) * 2;
+
+    % === Traitement du bruit impulsionnel (Clipping) ===
+    
+    % 1. Calculer l'amplitude moyenne (RMS) du signal courant.
+    current_rms = sqrt(mean(abs(rx_base).^2));
+    
+    % 2. Réglage du seuil (Threshold)
+    threshold = 4 * current_rms; 
+    
+    % 3. Limitation (Clipping)
+    outlier_indices = abs(rx_base) > threshold;
+    
+    % Méthode B: Mise à zéro (Blanking)
+    rx_base(outlier_indices) = 0; 
+
     rx_filt = upfirdn(rx_base, h_rrc, 1, 1);
     
     % Trouver le point de départ des symboles
     start_idx = total_delay + 1;
     rx_sym = rx_filt(start_idx : sps : end);
-    % S'assurer que la longueur correspond
-    rx_sym = rx_sym(1:min(length(tx_symbols), length(rx_sym)));
     
-    % Démodulation
-    if strcmp(chain_type, 'auto')
-        % Démodulation automatique
+    % === Égaliseur LMS (pour contrer les effets de Rayleigh et multi-trajets) ===
+    if ismember(impairment_type, {'Rayleigh', 'All'})
+        disp('Application de l''égaliseur LMS pour corriger le fading Rayleigh...');
+        
+        % 1. Génération dynamique de la constellation
         if M == 16
-            rx_bits = qamdemod(rx_sym, M, 'OutputType', 'bit', 'UnitAveragePower', true);
+            eq_const = qammod(0:M-1, M, 'UnitAveragePower', true);
         else
-            rx_bits = pskdemod(rx_sym, M, phase_offset, 'OutputType', 'bit');
+            eq_const = pskmod(0:M-1, M, phase_offset);
         end
+
+        % 2. Calcul dynamique de la longueur de comparaison
+        safe_len = min([length(rx_sym), length(tx_symbols), 1000]);
+        
+        if safe_len > 10
+            % Alignement au niveau des symboles
+            d_sym = finddelay(tx_symbols(1:safe_len), rx_sym(1:safe_len));
+            
+            % Compensation du délai
+            if d_sym > 0 && d_sym < length(rx_sym)
+                rx_in = rx_sym(d_sym + 1 : end);
+                tx_ref = tx_symbols(1 : length(rx_in));
+            else
+                rx_in = rx_sym;
+                tx_ref = tx_symbols;
+            end
+        else
+            rx_in = rx_sym;
+            tx_ref = tx_symbols;
+        end
+
+        % 3. Configuration de l'égaliseur avec paramètres optimisés
+        lms_eq = comm.LinearEqualizer(...
+            'Algorithm', 'LMS', ...
+            'NumTaps', 61, ... % Augmenté pour meilleure performance
+            'StepSize', 0.0005, ... % Réduit pour convergence plus stable
+            'ReferenceTap', 31, ...
+            'Constellation', complex(eq_const), ...
+            'AdaptAfterTraining', true);
+        
+        % 4. Exécution de l'égalisation
+        train_len = min(length(rx_in), length(tx_ref));
+        if train_len > 100  
+            [rx_eq, ~] = lms_eq(rx_in, tx_ref);
+        else
+            rx_eq = rx_in; 
+        end
+
+        % 5. Correction de phase pour éviter les inversions
+        if length(rx_eq) > 50 && length(tx_ref) > 50
+            align_len = min([1000, length(rx_eq), length(tx_ref)]);
+            phase_rot = angle(mean(conj(rx_eq(1:align_len)) .* tx_ref(1:align_len)));
+            rx_eq = rx_eq * exp(-1j * phase_rot);
+        else
+            disp('    Symboles insuffisants pour une correction de phase précise.');
+        end
+        
+        % 6. Troncature adaptative
+        converge_skip = 500;
+        if length(rx_eq) > converge_skip + 1000
+            rx_sym = rx_eq(converge_skip + 1 : end);
+        else
+            rx_sym = rx_eq;
+        end
+    end
+
+    % Démodulation (automatique ou manuelle)
+    if isempty(rx_sym)
+        disp('Avertissement : vecteur de symboles reçus vide, saut de la démodulation.');
+        rx_bits = [];
     else
-        % Démodulation manuelle
-        rx_bits = demapping_manual(rx_sym, M, phase_offset, k);
+        if strcmp(chain_type, 'auto')
+            if M == 16
+                rx_bits = qamdemod(rx_sym, M, 'OutputType', 'bit', 'UnitAveragePower', true);
+            else
+                rx_bits = pskdemod(rx_sym, M, phase_offset, 'OutputType', 'bit');
+            end
+        else
+            % Démodulation manuelle
+            rx_bits = demapping_manual(rx_sym, M, phase_offset, k);
+        end
+    end
+
+    % Calcul du BER avec alignement robuste
+    total_rx_bits = length(rx_bits);
+    total_tx_bits = length(tx_bits_with_pilot);
+    
+    if total_rx_bits < 10
+        ber = 0.5;
+        num_errors = floor(total_tx_bits / 2);
+    else
+        % 1. Recherche du délai au niveau des bits
+        bit_comp_len = min([total_tx_bits, total_rx_bits, 2000]);
+        d_bit = finddelay(tx_bits_with_pilot(1:bit_comp_len), rx_bits(1:bit_comp_len));
+        
+        % 2. Alignement élastique
+        if d_bit > 0 && d_bit < total_rx_bits
+            rx_temp = rx_bits(d_bit + 1 : end);
+            tx_temp = tx_bits_with_pilot;
+        elseif d_bit < 0 && abs(d_bit) < total_tx_bits
+            tx_temp = tx_bits_with_pilot(-d_bit + 1 : end);
+            rx_temp = rx_bits;
+        else
+            tx_temp = tx_bits_with_pilot;
+            rx_temp = rx_bits;
+        end
+        
+        % 3. Alignement final avec vérification des limites
+        L = min(length(tx_temp), length(rx_temp));
+        if L > 0
+            tx_aligned = tx_temp(1:L);
+            rx_aligned = rx_temp(1:L);
+            [num_errors, ber] = biterr(tx_aligned, rx_aligned);
+        else
+            ber = 0.5;
+        end
     end
     
-    % Calcul du BER
-    [~, ber] = biterr(tx_bits, rx_bits);
+    disp(['BER: ', num2str(ber)]);
 end
 
 %% ==========================================
@@ -397,7 +538,7 @@ function plot_eye_diagram_tx(tx_filtered, sps, modulation_name, fs)
 end
 
 %% ==========================================
-%% 5. Test avec différents canaux dégradés
+%% 6. Test avec différents canaux dégradés
 %% ==========================================
 if USE_IMPAIRMENTS
     disp('==========================================');
@@ -426,17 +567,32 @@ if USE_IMPAIRMENTS
                 M = 16; k = 4; phase_offset = 0;
         end
         
-        % Assurer l'alignement du nombre de bits (utiliser un nombre plus petit pour le test)
-        N_test = 2000;  % Réduire pour accélérer le test
+        N_test = N;  % Réduire pour accélérer le test
         N_adjusted = floor(N_test / k) * k;
         tx_bits = randi([0 1], N_adjusted, 1);
         
-        % Génération des symboles (chaîne automatique)
+        pilot_len = 3000; % Longueur du préambule de guidage
+        if M == 16
+            pilot_indices = randi([0 M-1], pilot_len, 1);
+            pilot_sym = qammod(pilot_indices, M, 'UnitAveragePower', true);
+            pilot_bits = qamdemod(pilot_sym, M, 'OutputType', 'bit', 'UnitAveragePower', true);
+        else
+            pilot_indices = randi([0 M-1], pilot_len, 1);
+            pilot_sym = pskmod(pilot_indices, M, phase_offset);
+            pilot_bits = pskdemod(pilot_sym, M, phase_offset, 'OutputType', 'bit');
+        end
+        
+        
         if M == 16
             tx_sym_auto = qammod(tx_bits, M, 'InputType', 'bit', 'UnitAveragePower', true);
         else
             tx_sym_auto = pskmod(tx_bits, M, phase_offset, 'InputType', 'bit');
         end
+        tx_sym_with_pilot = [pilot_sym; tx_sym_auto];
+        tx_bits_with_pilot = [pilot_bits; tx_bits];
+        
+        disp(['    Longueur totale: ', num2str(length(tx_sym_with_pilot)), ' symboles (', ...
+              num2str(pilot_len), ' guide频 + ', num2str(length(tx_sym_auto)), ' données)']);
         
         % Tester chaque type de dégradation
         ber_results = zeros(length(impairments_to_test), 1);
@@ -447,10 +603,10 @@ if USE_IMPAIRMENTS
             
             % Simulation avec la dégradation
             [ber, rx_sym, rx_filt] = simulate_chain_with_impairments(...
-                tx_sym_auto, tx_bits, M, phase_offset, ...
+                tx_sym_with_pilot, tx_bits_with_pilot, M, phase_offset, ...
                 snr_target_fixed, k, sps, fc, fs, h_rrc, total_delay, ...
                 'auto', impairment, ...
-                IMPULSE_PROBABILITY, IMPULSE_AMPLITUDE, NUM_RAYS, MAX_DELAY, DOPPLER_SHIFT);
+                IMPULSE_PROBABILITY, IMPULSE_AMPLITUDE, NUM_RAYS, MAX_DELAY, DOPPLER_SHIFT, SELECTED_IMPAIRMENT);
             
             ber_results(impair_idx) = ber;
             
@@ -480,17 +636,16 @@ if USE_IMPAIRMENTS
             title(['BER = ', num2str(ber, '%.4f')]);
             grid on;
             
-            % Sous-graphique 4: Diagramme de l'oeil sur le signal reçu avant sous-échantillonnage
+            eye_pilot_len = min(100, pilot_len);
+            eye_tx_sym = tx_sym_with_pilot(1:eye_pilot_len);
+            eye_tx_bits = tx_bits_with_pilot(1:eye_pilot_len * k);
             subplot(2, 3, [4, 5, 6]);
             
-            % Pour l'oeil, nous avons besoin du signal filtré avant sous-échantillonnage
-            % Recalculer le signal reçu pour obtenir le signal complet
+            % Recalculer le signal reçu pour l'oeil
             [~, ~, rx_filt_complete] = simulate_chain_with_impairments(...
-                tx_sym_auto(1:min(50, length(tx_sym_auto))), ...  % Utiliser moins de symboles pour l'oeil
-                tx_bits(1:min(50*k, length(tx_bits))), ...
-                M, phase_offset, snr_target_fixed, k, sps, fc, fs, h_rrc, total_delay, ...
+                eye_tx_sym, eye_tx_bits, M, phase_offset, snr_target_fixed, k, sps, fc, fs, h_rrc, total_delay, ...
                 'auto', impairment, ...
-                IMPULSE_PROBABILITY, IMPULSE_AMPLITUDE, NUM_RAYS, MAX_DELAY, DOPPLER_SHIFT);
+                IMPULSE_PROBABILITY, IMPULSE_AMPLITUDE, NUM_RAYS, MAX_DELAY, DOPPLER_SHIFT, SELECTED_IMPAIRMENT);
             
             % Tracer l'oeil
             if ~isempty(rx_filt_complete) && length(rx_filt_complete) > 3*sps
@@ -508,9 +663,7 @@ if USE_IMPAIRMENTS
             
             % Figure supplémentaire: Oeil en émission
             figure('Name', [MODULATION_TYPE, ' - Oeil en Émission']);
-            
-            % Générer le signal filtré en émission pour l'oeil
-            tx_filtered_eye = upfirdn(tx_sym_auto(1:min(50, length(tx_sym_auto))), h_rrc, sps);
+            tx_filtered_eye = upfirdn(eye_tx_sym, h_rrc, sps);
             plot_eye_diagram_tx(tx_filtered_eye, sps, MODULATION_TYPE, fs);
         end
         
@@ -537,7 +690,7 @@ if USE_IMPAIRMENTS
 end
 
 %% ==========================================
-%% 6. Fonctions auxiliaires (conservées de l'original)
+%% 7. Fonctions auxiliaires
 %% ==========================================
 
 % Fonction de démodulation manuelle
@@ -582,17 +735,26 @@ function rx_bits = demapping_manual(rx_sym, M, phase_offset, k)
             1, 1   % 3 -> 11 (correspond à +1)
         ];
         
-        for i = 1:num_symbols
+        % === 修改开始 ===
+        % 1. 动态获取当前接收到的符号数量 (因为均衡器可能截断了前几百个点)
+        current_num_symbols = length(rx_sym); 
+
+        % 2. 重新初始化 rx_bits 容器 (长度也要变短)
+        rx_bits = zeros(current_num_symbols * 4, 1); % 16QAM 是 *4，QPSK 是 *2
+
+        % 3. 循环次数改为 current_num_symbols
+        for i = 1:current_num_symbols 
             bits_I_dec = demapping_logic_16qam(I_rec(i));
             bits_Q_dec = demapping_logic_16qam(Q_rec(i));
-            
+
             b_I = bit_patterns(bits_I_dec + 1, :);
             b_Q = bit_patterns(bits_Q_dec + 1, :);
-            
+
             start_idx = (i-1)*4 + 1;
             rx_bits(start_idx:start_idx+1) = b_I';
             rx_bits(start_idx+2:start_idx+3) = b_Q';
         end
+        % === 修改结束 ===
     end
 end
 
