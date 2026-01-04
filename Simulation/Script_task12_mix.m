@@ -24,7 +24,7 @@ total_delay = span * sps;
 % Paramètres des canaux dégradés
 CHANNEL_IMPAIRMENTS = {'AWGN', 'Impulsive', 'Rayleigh', 'All'};
 USE_IMPAIRMENTS = true;  % Activer/désactiver les canaux dégradés
-SELECTED_IMPAIRMENT = 'Rayleigh';  % Choisir 'AWGN', 'Impulsive', 'Rayleigh', ou 'All'
+SELECTED_IMPAIRMENT = 'Impulsive';  % Choisir 'AWGN', 'Impulsive', 'Rayleigh', ou 'All'
 
 % Paramètres du bruit impulsionnel
 IMPULSE_PROBABILITY = 0.01;     % Probabilité d'impulsion
